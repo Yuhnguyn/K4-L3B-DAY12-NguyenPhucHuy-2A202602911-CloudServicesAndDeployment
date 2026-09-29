@@ -22,10 +22,16 @@ services:
       - key: REDIS_URL
         fromService:
           name: day12-redis
-          type: redis
+          # `keyvalue` là cách viết hiện tại; `redis` chỉ còn là alias cũ
+          type: keyvalue
           property: connectionString
 
-  - type: redis
+  - type: keyvalue
     name: day12-redis
     plan: free
+    # [] = không mở ra Internet, chỉ service trong cùng workspace truy cập
+    # được qua private network — đúng thứ agent cần, và an toàn hơn.
     ipAllowList: []
+    # Lưu ý của plan free: Key Value free KHÔNG ghi xuống đĩa, nên mọi
+    # restart/maintenance của Render sẽ xoá sạch history/cost/ratelimit.
+    # Chấp nhận được cho bài lab; production thì phải trả phí để có persistence.
