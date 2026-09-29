@@ -1,0 +1,108 @@
+# Pipeline CI/CD cho lab Day 12.
+#
+# Mục tiêu: mỗi lần push/PR là tự chạy checkpoint trên máy sạch, tự build Docker
+# image, và CHỈ deploy khi cả hai đã xanh.
+#
+# Lưu ý quan trọng: tests/test_cp5.py gọi vào bản deploy đang sống và
+# tests/test_bonus_cicd.py kiểm tra badge của chính workflow này — chạy chúng
+# trong CI là tự tham chiếu vòng tròn (hoặc luôn đỏ), nên bị loại ra.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Push liên tiếp thì huỷ run cũ, không xếp hàng chờ nhau
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────────
+  # 1. Chạy toàn bộ checkpoint trên máy sạch
+  # ───────────────────────────────────────────────────────────────
+  test:
+    name: Checkpoint tests
+    runs-on: ubuntu-latest
+    env:
+      # Settings BẮT BUỘC có AGENT_API_KEY. Đây là giá trị GIẢ dành cho CI,
+      # không phải khóa thật của service — secret thật không bao giờ nằm ở đây.
+      AGENT_API_KEY: ci-dummy
+      # Test dùng fakeredis nên không cần Redis thật
+      REDIS_URL: "fake://"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Cài dependency
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Một dòng duy nhất: CI không có bản deploy sống để test_cp5 gọi vào,
+      # và test_bonus_cicd kiểm tra badge của chính workflow này.
+      # `-m "not docker"` loại các test build image (đã có job `build` lo).
+      - name: Chạy checkpoint
+        run: pytest tests/ --ignore=tests/test_cp5.py --ignore=tests/test_bonus_cicd.py -m "not docker" -q
+
+  # ───────────────────────────────────────────────────────────────
+  # 2. Build Docker image trên máy sạch
+  #    Bắt các lỗi kiểu "file này chỉ có trên máy tôi" hoặc .dockerignore
+  #    loại nhầm thứ image cần — thứ mà chỉ lộ ra lúc deploy.
+  # ───────────────────────────────────────────────────────────────
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t day12-agent:ci .
+
+  # ───────────────────────────────────────────────────────────────
+  # 3. Deploy — CHỈ khi test và build đã xanh, và CHỈ từ nhánh main
+  # ───────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Render
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      # Deploy hook của Render: Settings → Deploy Hook. Cất trong
+      # repo → Settings → Secrets and variables → Actions → Secrets.
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      # URL công khai không phải secret → dùng Variables. Nếu chưa set thì
+      # dùng giá trị mặc định bên dưới.
+      PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://day12-agent-5wrs.onrender.com' }}
+    steps:
+      - name: Kích hoạt deploy trên Render
+        # Chưa cấu hình secret thì bỏ qua bước này thay vì làm đỏ pipeline
+        if: env.RENDER_DEPLOY_HOOK != ''
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
+
+      - name: Smoke test bản vừa deploy
+        # Deploy xong mà không kiểm tra thì chỉ biết "lệnh deploy chạy xong",
+        # không biết "service còn sống". Free tier của Render ngủ sau 15 phút
+        # không có traffic nên lần gọi đầu có thể mất ~60s → phải retry.
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 30 "$PUBLIC_URL/health"; then
+              echo ""
+              echo "Service sống, smoke test đạt."
+              exit 0
+            fi
+            echo "chưa phản hồi, thử lại sau 15s ($i/10)"
+            sleep 15
+          done
+          echo "Service không phản hồi sau 10 lần thử."
+          exit 1
