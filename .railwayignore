@@ -1,0 +1,34 @@
+# CP5 — Railway CLI dùng file này để loại trừ khỏi bundle source gửi lên
+# khi chạy `railway up`.
+#
+# Quan trọng nhất là `.env`: `.dockerignore` chỉ chặn nó vào IMAGE, không
+# chặn nó vào bản source upload. Secret phải được set bằng
+# `railway variables` / dashboard của Railway, không nằm trong source.
+#
+# CẢNH BÁO: TUYỆT ĐỐI không ignore `Dockerfile`, `requirements.txt`,
+# `app/`, `utils/`, `railway.toml` — Railway cần chúng để build và chạy.
+
+# ── Secrets ────────────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ── Python ─────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── Không cần cho build/runtime ────────────────────────────────────
+.git/
+.github/
+tests/
+screenshots/
+*.log
+.DS_Store
+docker-compose.yml
+docker-compose.scale.yml
