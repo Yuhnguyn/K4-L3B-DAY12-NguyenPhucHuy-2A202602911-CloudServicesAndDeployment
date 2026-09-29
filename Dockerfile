@@ -53,4 +53,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # $PORT do platform gán (Railway/Render/Cloud Run). 0.0.0.0 để gọi được
 # từ ngoài container — bind 127.0.0.1 thì bên ngoài không vào được.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+#
+# `exec` là BẮT BUỘC: không có nó, PID 1 là `sh`, mà sh không forward
+# SIGTERM cho tiến trình con → uvicorn không bao giờ nhận được tín hiệu
+# tắt → mọi request đang xử lý dở bị cắt giữa chừng mỗi lần deploy.
+# `exec` thay thế sh bằng uvicorn, để uvicorn thành PID 1 và nhận SIGTERM.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
