@@ -1,6 +1,36 @@
-# TODO (CP2): file này quyết định thứ KHÔNG được copy vào image.
-# Bỏ sót .env = leak secret vào image. Bỏ sót .git = image phình to.
-# Bổ sung đủ các mục còn thiếu — xem tests/test_cp2.py để biết yêu cầu.
+# CP2 — quyết định thứ KHÔNG được đưa vào build context / image.
+# Bỏ sót .env = secret nằm trong image gửi lên registry.
+# Bỏ sót .git = image phình to vô ích.
+# Lưu ý: TUYỆT ĐỐI không ignore `app`, `utils`, `requirements.txt` —
+# image cần chúng để chạy.
 
+# ── Secrets ────────────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ── Python ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# ── Git & CI ───────────────────────────────────────────────────────
 .git
 .gitignore
+.github/
+
+# ── Thứ chỉ dùng lúc phát triển / chấm điểm, runtime không cần ─────
+tests/
+screenshots/
+nginx/
+*.md
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
